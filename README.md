@@ -102,6 +102,15 @@ Hver gennemført kontrol gemmes med et fuldt snapshot af den anvendte skabelon p
 | `inspectra_category_filter` | Sidst valgte kategori-fane |
 | `inspectra_view_pref` | Sidst valgte Oversigt/Punktvisning ved "Begge" |
 
+## Installér som app (iPhone/Android)
+
+Begge sider har en Web App Manifest og apple-touch-icon, så de kan **føjes til hjemmeskærmen** som en selvstændig app (fuld skærm, eget ikon):
+
+- **iPhone (Safari):** Del-ikon → **Føj til hjemmeskærm**
+- **Android (Chrome):** Menu → **Installer app** / **Føj til startskærm**
+
+`index.html` installeres som **Inspectra** (udførelse), `builder.html` som **Inspectra Byg** (kontrolværktøj) – de er to separate installerbare genveje. Der er ingen service worker endnu, så en enhed skal have besøgt siden mindst én gang med netværk, før den er cachet af browseren; selve appen fungerer offline derefter, da al logik og data allerede er lokal.
+
 ## Tema
 
 Kun sort / hvid (+ grøn til **Udført**). Skift mørk ↔ lys (gemmes). Første besøg følger `prefers-color-scheme`.
@@ -111,6 +120,9 @@ Kun sort / hvid (+ grøn til **Udført**). Skift mørk ↔ lys (gemmes). Første
 ```
 index.html              # Udførelses-app: dashboard, gruppe/punkt-visning, PDF, historik
 builder.html             # Kontrolværktøj: skabelon-, felt- og svarmuligheds-editor
+manifest.json            # Web App Manifest for index.html ("Inspectra")
+manifest-builder.json    # Web App Manifest for builder.html ("Inspectra Byg")
+src/icons/               # App-ikoner (192/512/maskable/apple-touch-icon)
 css/styles.css           # Tema, layout, generisk felt-grid, historik, signatur
 css/builder.css          # Editor-layout: kontrolpunkt-grid, felt-typevælger, svarmuligheds-editor
 js/app.js                # Udførelsesflow, PDF, historik, import, deling
