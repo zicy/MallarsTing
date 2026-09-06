@@ -726,3 +726,25 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Import / install-conflict modal ─────────────────────────────────────── */
 .install-conflict { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+
+/* ── Update-available banner ──────────────────────────────────────────────── */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+  background: var(--text);
+  color: var(--bg);
+  z-index: 60;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.update-banner span { flex: 1; min-width: 0; }
+.update-banner .btn.primary { background: var(--bg); color: var(--text); border-color: var(--bg); }
+.update-banner .btn.ghost.icon { width: 30px; height: 30px; font-size: 1rem; color: var(--bg); }

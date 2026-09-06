@@ -5,6 +5,7 @@ import { ensureTemplatesInstalled, BUILTIN_ANSWER_SETS } from "./migrate.js";
 import * as fieldsMod from "./fields.js";
 import { fileToJpegDataUrl } from "./image.js";
 import { downloadInspectraFile, readInspectraFile, describeInstall } from "./inspectra-io.js";
+import { initUpdateChecker, dismissUpdate } from "./update-checker.js";
 
 const SCHEDULE_LABEL = {
   daily: "Daglig",
@@ -137,6 +138,19 @@ function validateTemplate(template) {
 
 /* ── Theme / toast ─────────────────────────────────────────── */
 initTheme();
+
+/* ── Update checker ────────────────────────────────────────── */
+let pendingUpdateVersion = null;
+function showUpdateBanner(version) {
+  pendingUpdateVersion = version;
+  $("#update-banner").classList.remove("hidden");
+}
+$("#btn-update-reload").addEventListener("click", () => window.location.reload());
+$("#btn-update-dismiss").addEventListener("click", () => {
+  if (pendingUpdateVersion) dismissUpdate(pendingUpdateVersion);
+  $("#update-banner").classList.add("hidden");
+});
+initUpdateChecker(showUpdateBanner);
 
 let toastTimer = 0;
 function toast(msg) {

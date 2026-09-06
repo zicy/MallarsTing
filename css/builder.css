@@ -5,6 +5,8 @@
   padding-bottom: calc(108px + var(--safe-bottom));
 }
 
+.update-banner { max-width: 760px; }
+
 .intro {
   padding: 0 16px 14px;
   font-size: 0.88rem;

@@ -6,6 +6,7 @@ import * as fields from "./fields.js";
 import { fileToJpegDataUrl, showLightbox } from "./image.js";
 import { createSignaturePad } from "./signature.js";
 import { readInspectraFile, describeInstall } from "./inspectra-io.js";
+import { initUpdateChecker, dismissUpdate } from "./update-checker.js";
 
 const CATEGORY_KEY = "inspectra_category_filter";
 const VIEW_PREF_KEY = "inspectra_view_pref";
@@ -180,6 +181,19 @@ function showView(id) {
 }
 
 initTheme();
+
+/* ── Update checker ────────────────────────────────────── */
+let pendingUpdateVersion = null;
+function showUpdateBanner(version) {
+  pendingUpdateVersion = version;
+  $("#update-banner").classList.remove("hidden");
+}
+$("#btn-update-reload").addEventListener("click", () => window.location.reload());
+$("#btn-update-dismiss").addEventListener("click", () => {
+  if (pendingUpdateVersion) dismissUpdate(pendingUpdateVersion);
+  $("#update-banner").classList.add("hidden");
+});
+initUpdateChecker(showUpdateBanner);
 
 /* ── Login ─────────────────────────────────────────────── */
 $("#login-form").addEventListener("submit", (e) => {
