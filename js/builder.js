@@ -4,7 +4,12 @@ import * as store from "./store.js";
 import { ensureTemplatesInstalled, BUILTIN_ANSWER_SETS } from "./migrate.js";
 import * as fieldsMod from "./fields.js";
 import { fileToJpegDataUrl } from "./image.js";
-import { downloadInspectraFile, readInspectraFile, describeInstall } from "./inspectra-io.js";
+import {
+  downloadInspectraFile,
+  downloadInspectraFileMulti,
+  readInspectraFile,
+  describeInstalls,
+} from "./inspectra-io.js";
 import { initUpdateChecker, dismissUpdate } from "./update-checker.js";
 
 const SCHEDULE_LABEL = {
@@ -936,25 +941,28 @@ function openFieldTypeModal(loc) {
 }
 
 /* ── Import (.inspectra) ───────────────────────────────────── */
-function showImportConflictModal(decision, template) {
+function conflictInfoHtml(decision, template) {
+  if (decision.action === "new") {
+    return `<strong>${esc(template.name)}</strong><span>Ny · Reference: ${esc(template.referenceId)} · v${template.version}</span>`;
+  } else if (decision.action === "update") {
+    return `<strong>${esc(template.name)}</strong><span>Opdatering · Installeret v${decision.installedVersion} → Importeret v${decision.importedVersion}</span>`;
+  }
+  return `<strong>${esc(template.name)}</strong><span>Ingen opdatering nødvendig · Installeret v${decision.installedVersion} · Importeret v${decision.importedVersion}</span>`;
+}
+
+function showImportConflictModal(entries) {
   const body = $("#import-modal-body");
   body.innerHTML = "";
   const h3 = document.createElement("h3");
-  const info = document.createElement("div");
-  info.className = "install-conflict";
-
-  if (decision.action === "new") {
-    h3.textContent = "Installer ny kontrol";
-    info.innerHTML = `<strong>${esc(template.name)}</strong><span>Reference: ${esc(template.referenceId)} · v${template.version}</span>`;
-  } else if (decision.action === "update") {
-    h3.textContent = "Opdater kontrol";
-    info.innerHTML = `<strong>${esc(template.name)}</strong><span>Installeret version: ${decision.installedVersion}</span><span>Importeret version: ${decision.importedVersion}</span>`;
-  } else {
-    h3.textContent = "Ingen opdatering nødvendig";
-    info.innerHTML = `<strong>${esc(template.name)}</strong><span>Installeret v${decision.installedVersion} · Importeret v${decision.importedVersion}</span>`;
-  }
+  h3.textContent = entries.length === 1 ? "Installer kontrol" : "Installer " + entries.length + " kontroller";
   body.appendChild(h3);
-  body.appendChild(info);
+
+  entries.forEach(({ decision, template }) => {
+    const info = document.createElement("div");
+    info.className = "install-conflict";
+    info.innerHTML = conflictInfoHtml(decision, template);
+    body.appendChild(info);
+  });
 
   const actions = document.createElement("div");
   actions.className = "modal-actions";
@@ -968,19 +976,101 @@ function showImportConflictModal(decision, template) {
   const confirm = document.createElement("button");
   confirm.type = "button";
   confirm.className = "btn primary";
-  confirm.textContent = decision.action === "new" ? "Installer" : "Installer/Opdater";
+  confirm.textContent = entries.some((e) => e.decision.action !== "same-or-older")
+    ? "Installer/Opdater alle"
+    : "Installer alligevel";
   confirm.addEventListener("click", () => {
-    store.mergeEmbeddedAnswerSets(template.embeddedAnswerSets);
-    store.upsertTemplate(template);
+    let lastCategory = null;
+    entries.forEach(({ template }) => {
+      store.mergeEmbeddedAnswerSets(template.embeddedAnswerSets);
+      store.upsertTemplate(template);
+      lastCategory = template.category || "andet";
+    });
     reloadFromStore();
-    state.category = template.category || "andet";
+    if (lastCategory) state.category = lastCategory;
     $("#import-modal").classList.add("hidden");
     showList();
-    toast("Importeret");
+    toast(entries.length === 1 ? "Importeret" : "Importeret " + entries.length + " kontroller");
   });
   actions.appendChild(confirm);
   body.appendChild(actions);
   $("#import-modal").classList.remove("hidden");
+}
+
+/* ── Export multiple (.inspectra) ─────────────────────────── */
+function showExportPickerModal() {
+  const body = $("#export-modal-body");
+  const sorted = state.templates
+    .slice()
+    .sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
+
+  const rowsHtml = sorted
+    .map(
+      (t) => `
+      <label class="option-row">
+        <input type="checkbox" data-export-pick="${esc(t.referenceId)}" checked />
+        <span>${esc(t.name.trim() || "Uden navn")} <span style="color:var(--text-muted)">· ${esc(categoryLabel(t.category))} · v${t.version}</span></span>
+      </label>`
+    )
+    .join("");
+
+  body.innerHTML = `
+    <h3>Eksportér kontroller</h3>
+    ${
+      sorted.length
+        ? `<div class="answerset-editor">${rowsHtml}</div>
+           <div class="modal-actions" style="justify-content:flex-start">
+             <button type="button" class="btn ghost small" id="export-select-all">Vælg alle</button>
+             <button type="button" class="btn ghost small" id="export-select-none">Fravælg alle</button>
+           </div>`
+        : '<p class="intro" style="padding:0">Ingen kontroller at eksportere endnu.</p>'
+    }
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" id="export-cancel">Annullér</button>
+      <button type="button" class="btn primary" id="export-confirm" ${sorted.length ? "" : "disabled"}>Eksportér valgte</button>
+    </div>`;
+
+  function checkboxes() {
+    return Array.from(body.querySelectorAll("[data-export-pick]"));
+  }
+
+  const selectAll = $("#export-select-all");
+  if (selectAll) selectAll.addEventListener("click", () => checkboxes().forEach((cb) => (cb.checked = true)));
+  const selectNone = $("#export-select-none");
+  if (selectNone) selectNone.addEventListener("click", () => checkboxes().forEach((cb) => (cb.checked = false)));
+
+  $("#export-cancel").addEventListener("click", () => $("#export-modal").classList.add("hidden"));
+  $("#export-confirm").addEventListener("click", () => {
+    const pickedIds = checkboxes()
+      .filter((cb) => cb.checked)
+      .map((cb) => cb.dataset.exportPick);
+    if (!pickedIds.length) {
+      alert("Vælg mindst én kontrol.");
+      return;
+    }
+    const picked = sorted.filter((t) => pickedIds.includes(t.referenceId));
+    const invalid = picked.filter((t) => validateTemplate(t).length);
+    if (invalid.length) {
+      alert(
+        "Kan ikke eksportere - følgende har fejl:\n- " +
+          invalid.map((t) => t.name.trim() || t.referenceId).join("\n- ")
+      );
+      return;
+    }
+    picked.forEach((t) => {
+      snapshotEmbeddedAnswerSets(t);
+      t.version += 1;
+      t.publishedAt = new Date().toISOString();
+      touch(t);
+    });
+    persist();
+    const filename = downloadInspectraFileMulti(picked);
+    toast("Eksporteret som " + filename);
+    $("#export-modal").classList.add("hidden");
+    if (currentTemplate()) rerenderEditor();
+  });
+
+  $("#export-modal").classList.remove("hidden");
 }
 
 /* ── Events: list ──────────────────────────────────────────── */
@@ -998,12 +1088,13 @@ $("#import-template-file").addEventListener("change", async (e) => {
   if (!file) return;
   try {
     const parsed = await readInspectraFile(file);
-    const decision = describeInstall(parsed.template);
-    showImportConflictModal(decision, parsed.template);
+    showImportConflictModal(describeInstalls(parsed.templates));
   } catch (err) {
     alert(err.message || "Kunne ikke importere filen.");
   }
 });
+
+$("#btn-export-multi").addEventListener("click", showExportPickerModal);
 
 /* ── Events: editor (delegated) ────────────────────────────── */
 $("#editor-body").addEventListener(

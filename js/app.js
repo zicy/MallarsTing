@@ -5,7 +5,7 @@ import { ensureTemplatesInstalled } from "./migrate.js";
 import * as fields from "./fields.js";
 import { fileToJpegDataUrl, showLightbox } from "./image.js";
 import { createSignaturePad } from "./signature.js";
-import { readInspectraFile, describeInstall } from "./inspectra-io.js";
+import { readInspectraFile, describeInstalls } from "./inspectra-io.js";
 import { initUpdateChecker, dismissUpdate, getLocalVersion, getRemoteVersionInfo } from "./update-checker.js";
 
 const CATEGORY_KEY = "inspectra_category_filter";
@@ -376,55 +376,59 @@ $("#import-file").addEventListener("change", async (e) => {
   if (!file) return;
   try {
     const parsed = await readInspectraFile(file);
-    const decision = describeInstall(parsed.template);
-    state.pendingImport = parsed.template;
-    showImportModal(decision, parsed.template);
+    state.pendingImport = parsed.templates;
+    showImportModal(describeInstalls(parsed.templates));
   } catch (err) {
     alert(err.message || "Kunne ikke importere filen.");
   }
 });
 
-function showImportModal(decision, template) {
-  const body = $("#import-modal-body");
-  body.innerHTML = "";
-  const h3 = document.createElement("h3");
-  const info = document.createElement("div");
-  info.className = "install-conflict";
-
+function conflictInfoHtml(decision, template) {
   if (decision.action === "new") {
-    h3.textContent = "Installer ny kontrol";
-    info.innerHTML =
+    return (
       "<strong>" +
       escapeHtml(template.name) +
-      "</strong><span>Reference: " +
+      "</strong><span>Ny · Reference: " +
       escapeHtml(template.referenceId) +
       " · v" +
       template.version +
-      "</span>";
+      "</span>"
+    );
   } else if (decision.action === "update") {
-    h3.textContent = "Opdater kontrol";
-    info.innerHTML =
+    return (
       "<strong>" +
       escapeHtml(template.name) +
-      "</strong><span>Installeret version: " +
+      "</strong><span>Opdatering · Installeret v" +
       decision.installedVersion +
-      "</span><span>Importeret version: " +
+      " → Importeret v" +
       decision.importedVersion +
-      "</span>";
-  } else {
-    h3.textContent = "Ingen opdatering nødvendig";
-    info.innerHTML =
-      "<strong>" +
-      escapeHtml(template.name) +
-      "</strong><span>Installeret version: " +
-      decision.installedVersion +
-      " · Importeret version: " +
-      decision.importedVersion +
-      "</span>";
+      "</span>"
+    );
   }
+  return (
+    "<strong>" +
+    escapeHtml(template.name) +
+    "</strong><span>Ingen opdatering nødvendig · Installeret v" +
+    decision.installedVersion +
+    " · Importeret v" +
+    decision.importedVersion +
+    "</span>"
+  );
+}
 
+function showImportModal(entries) {
+  const body = $("#import-modal-body");
+  body.innerHTML = "";
+  const h3 = document.createElement("h3");
+  h3.textContent = entries.length === 1 ? "Installer kontrol" : "Installer " + entries.length + " kontroller";
   body.appendChild(h3);
-  body.appendChild(info);
+
+  entries.forEach(({ decision, template }) => {
+    const info = document.createElement("div");
+    info.className = "install-conflict";
+    info.innerHTML = conflictInfoHtml(decision, template);
+    body.appendChild(info);
+  });
 
   const actions = document.createElement("div");
   actions.className = "modal-actions";
@@ -435,31 +439,21 @@ function showImportModal(decision, template) {
   cancel.addEventListener("click", closeImportModal);
   actions.appendChild(cancel);
 
-  if (decision.action !== "same-or-older") {
-    const confirm = document.createElement("button");
-    confirm.type = "button";
-    confirm.className = "btn primary";
-    confirm.textContent = decision.action === "new" ? "Installer" : "Opdater kontrol";
-    confirm.addEventListener("click", () => {
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "btn primary";
+  confirm.textContent = entries.some((e) => e.decision.action !== "same-or-older")
+    ? "Installer/Opdater alle"
+    : "Installer alligevel";
+  confirm.addEventListener("click", () => {
+    entries.forEach(({ template }) => {
       store.mergeEmbeddedAnswerSets(template.embeddedAnswerSets);
       store.upsertTemplate(template);
-      closeImportModal();
-      renderDashboard();
     });
-    actions.appendChild(confirm);
-  } else {
-    const reinstall = document.createElement("button");
-    reinstall.type = "button";
-    reinstall.className = "btn primary";
-    reinstall.textContent = "Installer alligevel";
-    reinstall.addEventListener("click", () => {
-      store.mergeEmbeddedAnswerSets(template.embeddedAnswerSets);
-      store.upsertTemplate(template);
-      closeImportModal();
-      renderDashboard();
-    });
-    actions.appendChild(reinstall);
-  }
+    closeImportModal();
+    renderDashboard();
+  });
+  actions.appendChild(confirm);
 
   body.appendChild(actions);
   $("#import-modal").classList.remove("hidden");
