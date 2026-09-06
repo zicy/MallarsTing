@@ -354,6 +354,67 @@
 }
 .row-tools .btn.icon { width: 26px; height: 22px; font-size: 0.7rem; }
 
+/* ── Drag handles & reordering ─────────────────────────────────────────── */
+.drag-handle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.drag-handle:active { cursor: grabbing; }
+.item-card > summary .drag-handle { width: 22px; }
+.row-tools .drag-handle { width: 26px; height: 20px; font-size: 0.85rem; }
+
+[data-drag-group].dragging,
+[data-drag-point].dragging,
+[data-drag-row].dragging {
+  opacity: 0.4;
+}
+
+.drop-indicator {
+  height: 3px;
+  flex-shrink: 0;
+  margin: -1px 0;
+  border-radius: 2px;
+  background: var(--accent, #2563eb);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #2563eb) 25%, transparent);
+  pointer-events: none;
+}
+
+.drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--primary);
+  color: var(--primary-text);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.drag-preview-icon { opacity: 0.7; }
+
+body.dragging-active {
+  cursor: grabbing !important;
+  user-select: none;
+}
+body.dragging-active * {
+  cursor: grabbing !important;
+}
+
 .field-cell-editor {
   flex: 1;
   min-width: 0;

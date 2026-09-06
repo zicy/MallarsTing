@@ -358,7 +358,7 @@ function renderFieldCellHtml(field, loc) {
     </div>`;
 }
 
-function renderRowHtml(row, gIdx, pIdx, rIdx, rowsLen) {
+function renderRowHtml(row, gIdx, pIdx, rIdx) {
   const cellsHtml = row.fields
     .map((field, fIdx) => {
       const loc = gIdx + ":" + pIdx + ":" + rIdx + ":" + fIdx;
@@ -368,25 +368,23 @@ function renderRowHtml(row, gIdx, pIdx, rIdx, rowsLen) {
     .join("");
   const rowLoc = gIdx + ":" + pIdx + ":" + rIdx;
   return `
-    <div class="row-strip">
+    <div class="row-strip" data-drag-row="${rowLoc}" draggable="false">
       <div class="row-tools">
-        <button type="button" class="btn ghost icon" data-move-row="${rowLoc}:-1" ${rIdx === 0 ? "disabled" : ""} title="Flyt op">↑</button>
-        <button type="button" class="btn ghost icon" data-move-row="${rowLoc}:1" ${rIdx === rowsLen - 1 ? "disabled" : ""} title="Flyt ned">↓</button>
+        <span class="drag-handle" data-drag-handle title="Flyt række">⠿</span>
         <button type="button" class="btn ghost icon" data-del-row="${rowLoc}" title="Slet række">×</button>
       </div>
       ${cellsHtml}
     </div>`;
 }
 
-function renderPointHtml(group, gIdx, point, pIdx) {
-  const rowsHtml = point.rows.map((row, rIdx) => renderRowHtml(row, gIdx, pIdx, rIdx, point.rows.length)).join("");
+function renderPointHtml(gIdx, point, pIdx) {
+  const rowsHtml = point.rows.map((row, rIdx) => renderRowHtml(row, gIdx, pIdx, rIdx)).join("");
   const pointLoc = gIdx + ":" + pIdx;
   return `
-    <div class="point-card">
+    <div class="point-card" data-drag-point="${pointLoc}" draggable="false">
       <div class="point-head">
+        <span class="drag-handle" data-drag-handle title="Flyt kontrolpunkt">⠿</span>
         <input type="text" data-point-label="${pointLoc}" value="${esc(point.label)}" placeholder="Kontrolpunkt-navn" />
-        <button type="button" class="btn ghost icon" data-move-point="${pointLoc}:-1" ${pIdx === 0 ? "disabled" : ""} title="Flyt op">↑</button>
-        <button type="button" class="btn ghost icon" data-move-point="${pointLoc}:1" ${pIdx === group.points.length - 1 ? "disabled" : ""} title="Flyt ned">↓</button>
         <button type="button" class="btn ghost icon" data-dup-point="${pointLoc}" title="Dupliker">⧉</button>
         <button type="button" class="btn ghost icon" data-del-point="${pointLoc}" title="Slet">×</button>
       </div>
@@ -416,14 +414,13 @@ function renderTemplateHeaderHtml(template) {
 function renderGroupHtml(group, idx, template) {
   const title = group.name.trim() || "Ny " + itemNoun(template, false);
   const titleClass = group.name.trim() ? "item-title" : "item-title empty";
-  const pointsHtml = group.points.map((p, pIdx) => renderPointHtml(group, idx, p, pIdx)).join("");
+  const pointsHtml = group.points.map((p, pIdx) => renderPointHtml(idx, p, pIdx)).join("");
   return `
-    <details class="item-card" open>
+    <details class="item-card" data-drag-group="${idx}" draggable="false" open>
       <summary>
+        <span class="drag-handle" data-drag-handle title="Flyt">⠿</span>
         <span class="${titleClass}" data-item-title="${idx}">${esc(title)}</span>
         <span class="item-tools">
-          <button type="button" class="btn ghost icon" data-move="${idx}:-1" ${idx === 0 ? "disabled" : ""} title="Flyt op">↑</button>
-          <button type="button" class="btn ghost icon" data-move="${idx}:1" ${idx === template.groups.length - 1 ? "disabled" : ""} title="Flyt ned">↓</button>
           <button type="button" class="btn ghost icon" data-dup-item="${idx}" title="Dupliker">⧉</button>
           <button type="button" class="btn ghost icon" data-del-item="${idx}" title="Slet">×</button>
         </span>
@@ -663,16 +660,19 @@ function addGroup() {
   renderEditor();
 }
 
-function moveGroup(idx, dir) {
+function reorderArray(arr, from, to) {
+  if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return false;
+  const [item] = arr.splice(from, 1);
+  arr.splice(to, 0, item);
+  return true;
+}
+
+function reorderGroup(from, to) {
   const template = currentTemplate();
-  if (!template) return;
-  const to = idx + dir;
-  if (to < 0 || to >= template.groups.length) return;
-  const arr = template.groups;
-  [arr[idx], arr[to]] = [arr[to], arr[idx]];
+  if (!template || !reorderArray(template.groups, from, to)) return;
   touch(template);
   persist();
-  renderEditor();
+  rerenderEditor();
 }
 
 function deleteGroup(idx) {
@@ -709,17 +709,13 @@ function addPoint(gIdx) {
   renderEditor();
 }
 
-function movePoint(gIdx, pIdx, dir) {
+function reorderPoint(gIdx, from, to) {
   const template = currentTemplate();
   const group = template && template.groups[gIdx];
-  if (!group) return;
-  const to = pIdx + dir;
-  if (to < 0 || to >= group.points.length) return;
-  const arr = group.points;
-  [arr[pIdx], arr[to]] = [arr[to], arr[pIdx]];
+  if (!group || !reorderArray(group.points, from, to)) return;
   touch(template);
   persist();
-  renderEditor();
+  rerenderEditor();
 }
 
 function deletePoint(gIdx, pIdx) {
@@ -755,17 +751,13 @@ function addRow(gIdx, pIdx, cols) {
   renderEditor();
 }
 
-function moveRow(gIdx, pIdx, rIdx, dir) {
+function reorderRow(gIdx, pIdx, from, to) {
   const template = currentTemplate();
   const point = template && template.groups[gIdx] && template.groups[gIdx].points[pIdx];
-  if (!point) return;
-  const to = rIdx + dir;
-  if (to < 0 || to >= point.rows.length) return;
-  const arr = point.rows;
-  [arr[rIdx], arr[to]] = [arr[to], arr[rIdx]];
+  if (!point || !reorderArray(point.rows, from, to)) return;
   touch(template);
   persist();
-  renderEditor();
+  rerenderEditor();
 }
 
 function deleteRow(gIdx, pIdx, rIdx) {
@@ -1017,10 +1009,198 @@ $("#import-template-file").addEventListener("change", async (e) => {
 $("#editor-body").addEventListener(
   "click",
   (e) => {
-    if (e.target.closest(".item-tools") || e.target.closest(".point-head")) e.preventDefault();
+    if (e.target.closest(".item-tools") || e.target.closest(".point-head") || e.target.closest(".drag-handle")) e.preventDefault();
   },
   true
 );
+
+/* ── Drag & drop reordering (groups, points, rows) ────────── */
+// Ordered most-specific first: a point/row handle sits *inside* an
+// ancestor group/point container too, and .closest() would happily match
+// those outer containers — checking narrowest scope first picks the
+// container the handle actually belongs to.
+const DRAG_KINDS = [
+  {
+    attr: "dragRow",
+    selector: "[data-drag-row]",
+    parseKey: (v) => v.split(":").map(Number),
+    reorder: ([gIdx, pIdx], from, to) => reorderRow(gIdx, pIdx, from, to),
+    label: () => "Række",
+  },
+  {
+    attr: "dragPoint",
+    selector: "[data-drag-point]",
+    parseKey: (v) => v.split(":").map(Number),
+    reorder: ([gIdx], from, to) => reorderPoint(gIdx, from, to),
+    label: (el) => el.querySelector("[data-point-label]")?.value?.trim() || "Kontrolpunkt",
+  },
+  {
+    attr: "dragGroup",
+    selector: "[data-drag-group]",
+    parseKey: (v) => Number(v),
+    reorder: (key, from, to) => reorderGroup(from, to),
+    label: (el) => el.querySelector(".item-title")?.textContent?.trim() || "Emne",
+  },
+];
+
+// Reordering is driven by our own mouse tracking rather than the native
+// HTML5 drag API — native drag captures the pointer in a way that also
+// suppresses mouse-wheel scrolling in most browsers, which made it
+// impossible to scroll the page while dragging. Auto-scroll near the
+// viewport edges is kept as the way to reach items further up/down.
+let dragPending = null; // { kind, container, startX, startY } — before the move threshold is hit
+let dragCtx = null; // { kind, container, key, group, indicator, hoverTarget, hoverBefore } — active drag
+let dragPreviewEl = null;
+
+function dragKeyOf(kind, el) {
+  const parsed = kind.parseKey(el.dataset[kind.attr]);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
+function containerForHandle(handle) {
+  for (const kind of DRAG_KINDS) {
+    const container = handle.closest(kind.selector);
+    if (container) return { kind, container };
+  }
+  return null;
+}
+
+function dropIndicator() {
+  if (!dragCtx.indicator) {
+    const bar = document.createElement("div");
+    bar.className = "drop-indicator";
+    dragCtx.indicator = bar;
+  }
+  return dragCtx.indicator;
+}
+
+function placeIndicator(el, before) {
+  const bar = dropIndicator();
+  el.parentNode.insertBefore(bar, before ? el : el.nextSibling);
+}
+
+function removeIndicator() {
+  if (dragCtx && dragCtx.indicator && dragCtx.indicator.parentNode) {
+    dragCtx.indicator.parentNode.removeChild(dragCtx.indicator);
+  }
+}
+
+function movePreview(x, y) {
+  if (dragPreviewEl) {
+    dragPreviewEl.style.left = x + 16 + "px";
+    dragPreviewEl.style.top = y + 16 + "px";
+  }
+}
+
+function beginDrag(e) {
+  const { kind, container } = dragPending;
+  const key = dragKeyOf(kind, container);
+  dragCtx = { kind, container, key, group: key.slice(0, -1).join(":"), hoverTarget: null, hoverBefore: null };
+  container.classList.add("dragging");
+  document.body.classList.add("dragging-active");
+
+  const preview = document.createElement("div");
+  preview.className = "drag-preview";
+  preview.innerHTML = `<span class="drag-preview-icon">⠿</span><span class="drag-preview-label"></span>`;
+  preview.querySelector(".drag-preview-label").textContent = kind.label(container);
+  document.body.appendChild(preview);
+  dragPreviewEl = preview;
+  movePreview(e.clientX, e.clientY);
+
+  startAutoScroll();
+}
+
+function onDragMouseMove(e) {
+  if (!dragPending) return;
+  if (!dragCtx) {
+    const dx = e.clientX - dragPending.startX;
+    const dy = e.clientY - dragPending.startY;
+    if (Math.hypot(dx, dy) < 4) return;
+    beginDrag(e);
+  }
+  movePreview(e.clientX, e.clientY);
+  autoScrollY = e.clientY;
+
+  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const target = hit && hit.closest(dragCtx.kind.selector);
+  if (!target || target === dragCtx.container || target.classList.contains("dragging")) return;
+  const key = dragKeyOf(dragCtx.kind, target);
+  if (key.slice(0, -1).join(":") !== dragCtx.group) return;
+  const rect = target.getBoundingClientRect();
+  const before = e.clientY - rect.top < rect.height / 2;
+  placeIndicator(target, before);
+  dragCtx.hoverTarget = target;
+  dragCtx.hoverBefore = before;
+}
+
+function onDragMouseUp() {
+  document.removeEventListener("mousemove", onDragMouseMove);
+  if (dragCtx) {
+    if (dragCtx.hoverTarget) {
+      const key = dragKeyOf(dragCtx.kind, dragCtx.hoverTarget);
+      const from = dragCtx.key[dragCtx.key.length - 1];
+      let to = key[key.length - 1];
+      if (!dragCtx.hoverBefore) to += 1;
+      if (to > from) to -= 1;
+      dragCtx.kind.reorder(dragCtx.key, from, to);
+    }
+    if (dragCtx.container) dragCtx.container.classList.remove("dragging");
+    removeIndicator();
+    dragCtx = null;
+  }
+  document.body.classList.remove("dragging-active");
+  stopAutoScroll();
+  if (dragPreviewEl) {
+    dragPreviewEl.remove();
+    dragPreviewEl = null;
+  }
+  dragPending = null;
+}
+
+$("#editor-body").addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  const handle = e.target.closest(".drag-handle");
+  if (!handle) return;
+  const match = containerForHandle(handle);
+  if (!match) return;
+  e.preventDefault();
+  dragPending = { kind: match.kind, container: match.container, startX: e.clientX, startY: e.clientY };
+  document.addEventListener("mousemove", onDragMouseMove);
+  document.addEventListener("mouseup", onDragMouseUp, { once: true });
+});
+
+/* Auto-scroll the page while dragging near the top/bottom edge, for
+   reaching items further up/down than the viewport shows. */
+let autoScrollY = null;
+let autoScrollRaf = null;
+
+function startAutoScroll() {
+  if (autoScrollRaf) return;
+  const EDGE = 90;
+  const MAX_SPEED = 20;
+  const tick = () => {
+    if (!dragCtx) {
+      autoScrollRaf = null;
+      return;
+    }
+    if (autoScrollY != null) {
+      const h = window.innerHeight;
+      if (autoScrollY < EDGE) {
+        window.scrollBy(0, -MAX_SPEED * (1 - autoScrollY / EDGE));
+      } else if (autoScrollY > h - EDGE) {
+        window.scrollBy(0, MAX_SPEED * (1 - (h - autoScrollY) / EDGE));
+      }
+    }
+    autoScrollRaf = requestAnimationFrame(tick);
+  };
+  autoScrollRaf = requestAnimationFrame(tick);
+}
+
+function stopAutoScroll() {
+  if (autoScrollRaf) cancelAnimationFrame(autoScrollRaf);
+  autoScrollRaf = null;
+  autoScrollY = null;
+}
 
 $("#editor-body").addEventListener("click", (e) => {
   const t = e.target.closest("button");
@@ -1031,12 +1211,6 @@ $("#editor-body").addEventListener("click", (e) => {
   if (t.id === "btn-duplicate-template") return duplicateTemplate();
   if (t.id === "btn-export-template") return exportTemplate();
 
-  if (t.dataset.move) {
-    e.preventDefault();
-    e.stopPropagation();
-    const [idx, dir] = t.dataset.move.split(":").map(Number);
-    return moveGroup(idx, dir);
-  }
   if (t.dataset.delItem !== undefined) {
     e.preventDefault();
     e.stopPropagation();
@@ -1060,12 +1234,6 @@ $("#editor-body").addEventListener("click", (e) => {
   }
   if (t.dataset.addPoint !== undefined) return addPoint(Number(t.dataset.addPoint));
 
-  if (t.dataset.movePoint) {
-    e.preventDefault();
-    e.stopPropagation();
-    const [gIdx, pIdx, dir] = t.dataset.movePoint.split(":").map(Number);
-    return movePoint(gIdx, pIdx, dir);
-  }
   if (t.dataset.delPoint) {
     const [gIdx, pIdx] = t.dataset.delPoint.split(":").map(Number);
     return deletePoint(gIdx, pIdx);
@@ -1077,10 +1245,6 @@ $("#editor-body").addEventListener("click", (e) => {
   if (t.dataset.addRow) {
     const [gIdx, pIdx, cols] = t.dataset.addRow.split(":").map(Number);
     return addRow(gIdx, pIdx, cols);
-  }
-  if (t.dataset.moveRow) {
-    const [gIdx, pIdx, rIdx, dir] = t.dataset.moveRow.split(":").map(Number);
-    return moveRow(gIdx, pIdx, rIdx, dir);
   }
   if (t.dataset.delRow) {
     const [gIdx, pIdx, rIdx] = t.dataset.delRow.split(":").map(Number);
