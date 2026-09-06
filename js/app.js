@@ -6,7 +6,7 @@ import * as fields from "./fields.js";
 import { fileToJpegDataUrl, showLightbox } from "./image.js";
 import { createSignaturePad } from "./signature.js";
 import { readInspectraFile, describeInstall } from "./inspectra-io.js";
-import { initUpdateChecker, dismissUpdate } from "./update-checker.js";
+import { initUpdateChecker, dismissUpdate, getLocalVersion, getRemoteVersionInfo } from "./update-checker.js";
 
 const CATEGORY_KEY = "inspectra_category_filter";
 const VIEW_PREF_KEY = "inspectra_view_pref";
@@ -194,6 +194,58 @@ $("#btn-update-dismiss").addEventListener("click", () => {
   $("#update-banner").classList.add("hidden");
 });
 initUpdateChecker(showUpdateBanner);
+
+$("#btn-version-info").addEventListener("click", showVersionModal);
+
+async function showVersionModal() {
+  const body = $("#version-modal-body");
+  body.innerHTML = "<h3>Version</h3><p>Henter…</p>";
+  $("#version-modal").classList.remove("hidden");
+
+  const local = getLocalVersion();
+  const remote = await getRemoteVersionInfo();
+
+  body.innerHTML = "";
+  const h3 = document.createElement("h3");
+  h3.textContent = "Version";
+  body.appendChild(h3);
+
+  const rows = document.createElement("div");
+  rows.className = "install-conflict";
+  const localRow = document.createElement("p");
+  localRow.textContent = "Lokal version: " + (local || "ukendt");
+  const remoteRow = document.createElement("p");
+  if (!remote) {
+    remoteRow.textContent = "Server-version: kunne ikke hentes";
+  } else {
+    remoteRow.textContent =
+      "Server-version: " + remote.version + (remote.deployedAt ? " (" + remote.deployedAt + ")" : "");
+  }
+  rows.appendChild(localRow);
+  rows.appendChild(remoteRow);
+  if (remote && local && remote.version !== local) {
+    const notice = document.createElement("p");
+    notice.textContent = "Der er en nyere version tilgængelig.";
+    rows.appendChild(notice);
+  }
+  body.appendChild(rows);
+
+  const actions = document.createElement("div");
+  actions.className = "modal-actions";
+  const reload = document.createElement("button");
+  reload.type = "button";
+  reload.className = "btn primary full";
+  reload.textContent = "Genindlæs";
+  reload.addEventListener("click", () => window.location.reload());
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "btn ghost full";
+  close.textContent = "Luk";
+  close.addEventListener("click", () => $("#version-modal").classList.add("hidden"));
+  actions.appendChild(reload);
+  actions.appendChild(close);
+  body.appendChild(actions);
+}
 
 /* ── Login ─────────────────────────────────────────────── */
 $("#login-form").addEventListener("submit", (e) => {

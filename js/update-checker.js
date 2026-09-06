@@ -4,15 +4,20 @@ let baselineVersion = null;
 let dismissedVersion = null;
 let onAvailable = function () {};
 
-async function fetchVersion() {
+async function fetchVersionInfo() {
   try {
     const res = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();
-    return data && data.version ? data.version : null;
+    return data && data.version ? data : null;
   } catch (err) {
     return null;
   }
+}
+
+async function fetchVersion() {
+  const info = await fetchVersionInfo();
+  return info ? info.version : null;
 }
 
 async function check() {
@@ -29,6 +34,14 @@ async function check() {
 
 export function dismissUpdate(version) {
   dismissedVersion = version;
+}
+
+export function getLocalVersion() {
+  return baselineVersion;
+}
+
+export async function getRemoteVersionInfo() {
+  return fetchVersionInfo();
 }
 
 export function initUpdateChecker(onUpdateAvailable) {
