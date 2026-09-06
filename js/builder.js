@@ -24,6 +24,7 @@ const state = {
   templates: [],
   answerSets: {},
   editingRefId: null,
+  collapsedGroupIds: new Set(),
 };
 
 function reloadFromStore() {
@@ -420,8 +421,9 @@ function renderGroupHtml(group, idx, template) {
   const title = group.name.trim() || "Ny " + itemNoun(template, false);
   const titleClass = group.name.trim() ? "item-title" : "item-title empty";
   const pointsHtml = group.points.map((p, pIdx) => renderPointHtml(idx, p, pIdx)).join("");
+  const openAttr = state.collapsedGroupIds.has(group.id) ? "" : "open";
   return `
-    <details class="item-card" data-drag-group="${idx}" draggable="false" open>
+    <details class="item-card" data-group-id="${esc(group.id)}" data-drag-group="${idx}" draggable="false" ${openAttr}>
       <summary>
         <span class="drag-handle" data-drag-handle title="Flyt">⠿</span>
         <span class="${titleClass}" data-item-title="${idx}">${esc(title)}</span>
@@ -536,6 +538,14 @@ function renderEditor() {
       <button type="button" class="btn secondary full" id="btn-delete-route">Slet kontrol</button>
     </div>
   `;
+
+  $$("[data-group-id]", $("#editor-body")).forEach((details) => {
+    details.addEventListener("toggle", () => {
+      const id = details.dataset.groupId;
+      if (details.open) state.collapsedGroupIds.delete(id);
+      else state.collapsedGroupIds.add(id);
+    });
+  });
 }
 
 /* ── Mutations: template / group ──────────────────────────── */
