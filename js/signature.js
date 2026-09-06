@@ -10,7 +10,10 @@ export function createSignaturePad(canvas, opts) {
     ctx.lineWidth = 2.2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = getComputedStyle(canvas).color || "#000";
+    // Always ink in a fixed dark color, regardless of theme: the signature
+    // is exported onto a white PDF page, so a theme-derived (light) color
+    // would render washed out there.
+    ctx.strokeStyle = "#1a1a1a";
   }
 
   function resize() {
