@@ -1,150 +1,134 @@
-# Inspectra – Mobil kontrol
+# Inspectra – Offline kontrolplatform
 
 <p align="center">
   <img src="src/banner.png" alt="Inspectra" width="840">
 </p>
 
-Statisk smartphone-app til ruteinspektion og rengøring. Kører uden backend – alt lagres i browseren (`localStorage`).
+Statisk web-app til at bygge og udføre digitale kontroller. Kører uden backend – alt lagres i browseren (`localStorage`). Virksomheden ejer sine data; Inspectra behøver ikke modtage eller opbevare kontroldata.
 
 **Live:** [kontrol.toeffe.uk](https://kontrol.toeffe.uk)
 
-## Forløb
+## Grundprincip
+
+En kontrolskabelon (**Kontrol**) bygges frit i [builder.html](builder.html): egne felter, egne svarmuligheder, eget layout. Skabelonen eksporteres som en `.inspectra`-fil og importeres på den enhed, der skal udføre kontrollen ([index.html](index.html)) – typisk PC bygger, telefon/tablet udfører. Enhederne behøver ikke kende hinanden.
+
+```
+PC (builder.html)                 Telefon/tablet (index.html)
+Byg kontrol                       Importér .inspectra
+  │                                     │
+  ▼                                     ▼
+Eksportér .inspectra  ───(fil)───>  Udfør kontrol offline
+                                        │
+                                        ▼
+                                   Historik + PDF lokalt
+```
+
+## Datamodel
+
+```
+Template (Kontrol)
+  referenceId      permanent, virksomheden vælger selv (fx "AVA2-PK-001")
+  version          øges ved hver eksport
+  executionView    "oversigt" | "punktvisning" | "begge"
+  groups: Group[]
+
+Group                          (fysisk maskine/område)
+  points: Kontrolpunkt[]
+
+Kontrolpunkt
+  rows: Row[]                  visuel række/kolonne-grid
+
+Row
+  columns: 1 | 2 | 3
+  fields: Field[]
+
+Field
+  type, label, required, config   (se felttyper nedenfor)
+```
+
+Svarmuligheder er aldrig hardcodet: et **AnswerSet** er et navngivet, genbrugeligt sæt af muligheder (fx "Tilstand": OK/Slidt/Kritisk), som Enkeltvalg-, Checkbokse- og Dropdown-felter peger på. Sæt redigeres i et sæts egen editor (tilføj/omdøb/flyt/slet/standardsvar) og genbruges på tværs af kontroller.
+
+### Felttyper
+
+| Type | Dansk navn | Bemærkning |
+|---|---|---|
+| `heading` | Overskrift | Ren sektionstekst, intet svar |
+| `short_text` / `long_text` | Kort/lang tekst | Fritekst |
+| `comment` | Kommentar | Fritekst, samme render som lang tekst |
+| `number` | Tal | Valgfri enhed |
+| `yesno` | Ja/Nej | Fast to-valg |
+| `single_choice` | Enkeltvalg | Fra et AnswerSet |
+| `multi_choice` | Checkbokse | Fra et AnswerSet, flere valg |
+| `dropdown` | Dropdown | Fra et AnswerSet |
+| `date` | Dato | |
+| `photo` | Kontrolbillede | Kamera/galleri/begge, ét eller flere billeder |
+| `reference_image` | Referencebillede | Sat ved opbygning, skrivebeskyttet ved udførelse |
+| `signature` | Signatur | Frihånds-underskrift på canvas |
+
+Hvert felt kan markeres **påkrævet**.
+
+## Byg en kontrol
+
+1. Åbn [builder.html](builder.html) (live: [kontrol.toeffe.uk/builder.html](https://kontrol.toeffe.uk/builder.html)).
+2. Opret en kontrol, tilføj grupper (maskiner/områder) og kontrolpunkter.
+3. Byg hvert kontrolpunkts layout: tilføj rækker (1–3 kolonner), placér felter, sæt svarmuligheder op.
+4. **Eksportér .inspectra** – dette øger versionsnummeret og downloader `{referenceId}_v{version}.inspectra`. Reference-ID låses efter første eksport.
+5. Overfør filen til målenheden (e-mail, USB, delt mappe – hvad virksomheden selv bruger) og **importér** den i [index.html](index.html)'s dashboard.
+
+Findes Reference-ID'et allerede på enheden, vises version-sammenligning og et **Opdater kontrol**-valg. Allerede gennemførte kontroller (historik) påvirkes aldrig af en opdatering – de gemmer et snapshot af den skabelon, de blev udført med.
+
+## Udfør en kontrol
 
 1. **Log ind** – Arbejds-ID (gemmes i `localStorage`)
-2. **Vælg kategori** – **Maskiner** eller **Rengøring**
-3. **Vælg rute/zone** – filtrér efter interval (daglig / ugentlig / månedlig / årlig)
-4. **Gennemgå punkter** – status + evt. foto/bemærkning
-5. **Afslut** – markeres **Udført** (grøn) · PDF · e-mail / del
+2. **Vælg kategori og kontrol** på dashboardet
+3. **Gennemgå grupper og kontrolpunkter** – Oversigt (alle punkter på én side), Punktvisning (ét ad gangen), eller Begge (skift undervejs), afhængig af kontrollens indstilling
+4. **Afslut gruppe** når alle påkrævede felter er udfyldt, derefter **Afslut kontrol**
+5. **Historik** gemmer resultatet permanent; **PDF** genereres on-demand (også fra historik)
 
-## Kategorier
+## Historik
 
-| Kategori | Indhold | Statusvalg |
-|---|---|---|
-| **Maskiner** | Inspektionsruter med maskiner | OK / Slidt / Kritisk |
-| **Rengøring** | Zoner med områder + plantegning | Udført / Ikke aktuelt / Afvigelse |
-
-### Maskiner
-
-- **OK**, **Slidt** og **Kritisk** kræver foto + bemærkning
-- **Kritisk** kan markeres til udskiftning
-- Progress: `x / y maskiner`
-
-### Rengøring
-
-- Plantegning: `src/kort.png` (Blå vask · Rød produktion · Brun toilet/utility)
-- Ruter er knyttet til zonerne via `zoneLabel`
-- **Ikke aktuelt** – ingen foto/bemærkning
-- **Afvigelse** – bemærkning påkrævet, foto valgfrit
-- Progress: `x / y områder`
-- Ingen “markér til udskiftning”
-
-## Udført-status (grøn)
-
-Når en rute afsluttes, gemmes den som udført pr. arbejds-ID og interval:
-
-| Interval | Gælder indtil |
-|---|---|
-| Daglig | Næste dag |
-| Ugentlig | Næste ISO-uge |
-| Månedlig | Næste måned |
-| Årlig | Næste år |
-
-Rute-/zonekort får grøn kant + badge **Udført**. Ruten kan stadig åbnes og køres igen (overskriver perioden).
-
-## Foto
-
-I fotodialogen:
-
-- **Tag foto** – åbner kamera (`capture="environment"`)
-- **Vælg foto** – galleri / filvælger
-
-Billeder komprimeres i browseren (max ~1600 px, JPEG) før de indlejres i PDF.
-
-Kræver kamera-tilladelse i browseren (Chrome/Safari/Firefox). HTTPS er påkrævet på telefonen.
-
-## Rapport / deling
-
-Efter afslutning:
-
-1. **Download PDF** – sort/hvid layout, fotos indlejret, kategori + zone i header
-2. **Send via e-mail**
-   - Telefon (Web Share med filer): deleark → vælg Mail → PDF vedhæftes
-   - Desktop: PDF downloades + `mailto:` med tekst (browsere kan **ikke** vedhæfte via `mailto:`)
-3. **Del PDF** – Web Share, når understøttet
-
-PDF genereres klient-side med [jsPDF](https://github.com/parallax/jsPDF) (CDN).
+Hver gennemført kontrol gemmes med et fuldt snapshot af den anvendte skabelon plus alle svar, fotos og signatur. En senere opdatering af skabelonen ændrer aldrig en tidligere gemt kontrol. PDF'en genereres fra snapshottet, ikke gemt som fil, for at holde `localStorage` let.
 
 ## localStorage-nøgler
 
 | Nøgle | Indhold |
 |---|---|
+| `inspectra_templates` | `{ referenceId: Template }` – alle installerede kontroller |
+| `inspectra_answersets` | `{ id: AnswerSet }` – delt bibliotek af svarmuligheder |
+| `inspectra_history` | `{ id: HistoryEntry }` – gennemførte kontroller med snapshot |
+| `inspectra_done` | `{ userId: { referenceId: { period, at } } }` – "udført denne periode"-badge |
 | `inspectra_user` | Arbejds-ID |
 | `inspectra_theme` | `dark` / `light` |
-| `inspectra_category` | `maskiner` / `rengoring` |
-| `inspectra_done` | JSON: `{ [userId]: { [routeId]: { period, at } } }` |
-| `inspectra_builder_draft` | Ruteværktøjets udkast (`builder.html`) |
+| `inspectra_category_filter` | Sidst valgte kategori-fane |
+| `inspectra_view_pref` | Sidst valgte Oversigt/Punktvisning ved "Begge" |
 
 ## Tema
 
-Kun sort / hvid (+ grøn til **Udført**).  
-Skift mørk ↔ lys (gemmes). Første besøg følger `prefers-color-scheme`.
+Kun sort / hvid (+ grøn til **Udført**). Skift mørk ↔ lys (gemmes). Første besøg følger `prefers-color-scheme`.
 
 ## Projektstruktur
 
 ```
-index.html          # Views + fotomodal
-builder.html        # Ruteværktøj (Maskiner + Rengøring)
-css/styles.css      # Tema, layout, statusknapper
-css/builder.css     # Desktop-layout til værktøjet
-js/app.js           # Flow, PDF, share, done-status
-js/builder.js       # Ruteværktøj
-js/image.js         # Billedkomprimering + lightbox
-js/data.js          # Ruter, maskiner/områder, statuskoder
-src/kort.png        # Plantegning (Rengøring)
-src/banner.png      # README-banner
-CNAME               # kontrol.toeffe.uk
+index.html              # Udførelses-app: dashboard, gruppe/punkt-visning, PDF, historik
+builder.html             # Kontrolværktøj: skabelon-, felt- og svarmuligheds-editor
+css/styles.css           # Tema, layout, generisk felt-grid, historik, signatur
+css/builder.css          # Editor-layout: kontrolpunkt-grid, felt-typevælger, svarmuligheds-editor
+js/app.js                # Udførelsesflow, PDF, historik, import, deling
+js/builder.js            # Skabelon-/felt-/svarmuligheds-editor, .inspectra eksport/import
+js/fields.js             # Felttype-register: rendering, validering, PDF-formatering
+js/signature.js          # Frihånds-signaturpad (canvas)
+js/store.js              # localStorage-lag for templates/answersets/history/done
+js/inspectra-io.js       # .inspectra fil-format, parse/byg, version-konflikt
+js/migrate.js            # Konvertering fra det gamle faste skema, seed-installation
+js/seed-templates.js     # Medfølgende demo-kontroller i den nye datamodel
+js/util.js               # Delte DOM-/id-/download-hjælpere
+js/theme.js              # Mørk/lys tema
+js/image.js              # Billedkomprimering + lightbox
+src/kort.png             # Plantegning (Rengøring)
+src/banner.png           # README-banner
+CNAME                    # kontrol.toeffe.uk
 .github/workflows/pages.yml
 ```
-
-## Tilpas data
-
-1. Åbn [builder.html](builder.html) (live: [kontrol.toeffe.uk/builder.html](https://kontrol.toeffe.uk/builder.html)).
-2. Byg **Maskiner**-ruter og **Rengøring**-zoner.
-3. **Download data.js** (eller kopiér) og erstat [`js/data.js`](js/data.js).
-4. Udgiv (push til `main`).
-
-Udkast gemmes i browseren og vises automatisk i inspektionsappen på samme enhed. **Gendan fra data.js** kasserer udkastet.
-
-Valgfrit **billede** på maskine/område og på hvert kontrolpunkt (`image`). Vises i appen som vejledning. Statuskoder røres ikke.
-
-Hver rute i `data.js`:
-
-```js
-{
-  id: "clean-blue",
-  name: "Blå zone – Vask",
-  description: "…",
-  schedule: "daily",          // daily | weekly | monthly | yearly
-  category: "rengoring",      // maskiner | rengoring
-  zoneLabel: "Blå · Vask",    // valgfri (vises på kort + i PDF)
-  machines: [                 // maskiner eller rengøringsområder
-    {
-      id: "C-BL-1",
-      name: "Vaskelinje vest",
-      location: "Blå zone · venstre linje",
-      image: "data:image/jpeg;base64,…", // valgfri
-      checks: [
-        { id: "floor", label: "Gulv og afløb", image: "…" },
-      ],
-    },
-  ],
-}
-```
-
-Statuskoder (`STATUS` / `STATUS_LABEL`):
-
-- Maskiner: `ok`, `worn`, `critical`
-- Rengøring: `done`, `skip`, `issue`
 
 ## Kør lokalt
 
@@ -153,11 +137,11 @@ npx serve .
 # eller en hvilken som helst statisk server
 ```
 
-Åbn URL’en på telefonen via samme Wi‑Fi, eller deploy til Pages for kamera/HTTPS.
+Åbn URL'en på telefonen via samme Wi-Fi, eller deploy til Pages for kamera/HTTPS.
 
 ## Udgiv (GitHub Pages)
 
-Push til `main` kører [`.github/workflows/pages.yml`](.github/workflows/pages.yml).  
+Push til `main` kører [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
 Workflow kopierer `index.html`, `builder.html`, `CNAME`, `css/`, `js/` og `src/` til Pages.
 
 **Første gang:**
@@ -171,3 +155,7 @@ Workflow kopierer `index.html`, `builder.html`, `CNAME`, `css/`, `js/` og `src/`
 - `CNAME` i roden
 - DNS: **CNAME** → `toeffe.github.io`
 - Slå **Enforce HTTPS** til, når certifikatet er klar
+
+## Ikke i denne version
+
+Ingen Inspectra-cloud, central brugerkonto, live synkronisering, web-dashboard, avanceret statistik, AI, realtime enhed-til-enhed-kommunikation, eller central administration af kundens enheder. Licensmodel (Solo/Business/Enterprise) er en fremtidig kommerciel beslutning, ikke en del af denne kodebase.
